@@ -78,13 +78,15 @@ withFragment (Plug scheme hostname port usesDefaultPort path query _) fragment =
 withoutFragment :: Plug -> Plug
 withoutFragment (Plug scheme hostname port usesDefaultPort path query _) = Plug scheme hostname port usesDefaultPort path query Nothing
 
-
+-- TODO: missing implementation for encoding
 encodeSegment :: String -> String
 encodeSegment text = text
 
+-- TODO: missing implementation for encoding
 encodeQuery :: String -> String
 encodeQuery text = text
 
+-- TODO: missing implementation for encoding
 encodeFragment :: String -> String
 encodeFragment text = text
 
