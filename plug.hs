@@ -3,12 +3,14 @@ joinString _ [] = ""
 joinString sep [ value ] = value
 joinString sep (value:values) = value ++ sep ++ joinString sep values
 
--- let p = Plug "http" "example.com" 80 True Nothing Nothing Nothing
+-- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, usesDefaultPort = True, path = Nothing, query = Nothing, fragment = Nothing }
 -- p `withScheme` "https" `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
 
 
 data Plug = Plug {
     scheme          :: String,
+    username        :: Maybe String,
+    password        :: Maybe String,
     hostname        :: String,
     port            :: Int,
     usesDefaultPort :: Bool,
@@ -16,9 +18,6 @@ data Plug = Plug {
     query           :: Maybe [(String, Maybe String)],
     fragment        :: Maybe String
 } deriving (Eq)
-
---(->) :: Plug -> (Plug -> Plug) -> Plug
---(->) p f = f p
 
 -- (Plug scheme hostname port usesDefaultPort path query fragment) = Plug scheme hostname port usesDefaultPort path query fragment
 
@@ -30,40 +29,42 @@ isDefaultPort "ftp" 21 = True
 isDefaultPort _ _ = False
 
 withScheme :: Plug -> String -> Plug
-withScheme (Plug _ hostname port _ path query fragment) scheme = Plug scheme hostname port (isDefaultPort scheme port) path query fragment
+withScheme plug scheme' = plug { scheme = scheme', usesDefaultPort = isDefaultPort scheme' (port plug) }
+
+withCredentials :: Plug -> (String, String) -> Plug
+withCredentials plug (username', password') = plug { username = Just username', password = Just password' } 
+
+withoutCredentials :: Plug -> Plug
+withoutCredentials plug@Plug { username = Nothing, password = Nothing } = plug
+withoutCredentials plug = plug { username = Nothing, password = Nothing }
 
 withHostname :: Plug -> String -> Plug
-withHostname (Plug scheme _ port usesDefaultPort path query fragment) hostname = Plug scheme hostname port usesDefaultPort path query fragment
+withHostname plug hostname' = plug { hostname = hostname' }
 
 withPort :: Plug -> Int -> Plug
-withPort (Plug scheme hostname _ _ path query fragment) port = Plug scheme hostname port (isDefaultPort scheme port) path query fragment
-
-at :: Plug -> String -> Plug
-at (Plug scheme hostname port usesDefaultPort Nothing query fragment) segment = 
-    Plug scheme hostname port usesDefaultPort (Just ([ segment ], False)) query fragment
-at (Plug scheme hostname port usesDefaultPort (Just (segments, trailingSlash)) query fragment) segment = 
-    Plug scheme hostname port usesDefaultPort (Just (segments ++ [ segment ], trailingSlash)) query fragment
+withPort plug port' = plug { port = port', usesDefaultPort = isDefaultPort (scheme plug) port' }
 
 withTrailingSlash :: Plug -> Plug
-withTrailingSlash (Plug scheme hostname port usesDefaultPort Nothing query fragment) = Plug scheme hostname port usesDefaultPort (Just ([], True)) query fragment
-withTrailingSlash (Plug scheme hostname port usesDefaultPort (Just (segments, _)) query fragment) = Plug scheme hostname port usesDefaultPort (Just (segments, True)) query fragment
+withTrailingSlash plug@Plug { path = Nothing } = plug { path = Just ([], True) }
+withTrailingSlash plug@Plug { path = Just (segments', True) } = plug
+withTrailingSlash plug@Plug { path = Just (segments', False) } = plug { path = Just (segments', True) }
 
 withoutTrailingSlash :: Plug -> Plug
-withoutTrailingSlash (Plug scheme hostname port usesDefaultPort (Just (segments, True)) query fragment) = Plug scheme hostname port usesDefaultPort (Just (segments, False)) query fragment
-withoutTrailingSlash p = p
+withoutTrailingSlash plug@Plug { path = Nothing } = plug
+withoutTrailingSlash plug@Plug { path = Just (segments', True) } = plug { path = Just (segments', False) }
+withoutTrailingSlash plug@Plug { path = Just (segments', False ) } = plug
 
+at :: Plug -> String -> Plug
+at plug@Plug { path = Nothing } segment = plug { path = Just ([ segment ], False)}
+at plug@Plug { path = Just (segments', trailingSlash') } segment = plug { path = Just (segments' ++ [ segment ], trailingSlash')}
 
 with :: Plug -> (String, Maybe String) -> Plug
-with (Plug scheme hostname port usesDefaultPort path Nothing fragment) kv = 
-    Plug scheme hostname port usesDefaultPort path (Just [ kv ]) fragment
-with (Plug scheme hostname port usesDefaultPort path (Just kvs) fragment) kv = 
-    Plug scheme hostname port usesDefaultPort path (Just (kvs ++ [ kv ])) fragment
+with plug@Plug { query = Nothing } kv = plug { query = Just [ kv ]}
+with plug@Plug { query = Just kvs } kv = plug { query = Just (kvs ++ [ kv ])}
 
 withParams :: Plug -> [(String, Maybe String)] -> Plug
-withParams (Plug scheme hostname port usesDefaultPort path Nothing fragment) kvs = 
-    Plug scheme hostname port usesDefaultPort path (Just kvs) fragment
-withParams (Plug scheme hostname port usesDefaultPort path (Just kvs1) fragment) kvs2 = 
-    Plug scheme hostname port usesDefaultPort path (Just (kvs1 ++ kvs2)) fragment
+withParams plug@Plug { query = Nothing } kvs = plug { query = Just kvs }
+withParams plug@Plug { query = Just kvs' } kvs = plug { query = Just (kvs' ++ kvs) }
 
 -- withQuery
 -- withoutQuery
@@ -73,10 +74,15 @@ withParams (Plug scheme hostname port usesDefaultPort path (Just kvs1) fragment)
 -- without key (Plug scheme hostname port usesDefaultPort path query fragment) = Plug scheme hostname port usesDefaultPort path query fragment
 
 withFragment :: Plug -> String -> Plug
-withFragment (Plug scheme hostname port usesDefaultPort path query _) fragment = Plug scheme hostname port usesDefaultPort path query (Just fragment)
+withFragment plug fragment' = plug { fragment = Just fragment' }
 
 withoutFragment :: Plug -> Plug
-withoutFragment (Plug scheme hostname port usesDefaultPort path query _) = Plug scheme hostname port usesDefaultPort path query Nothing
+withoutFragment plug@Plug { fragment = Nothing } = plug
+withoutFragment plug = plug { fragment = Nothing }
+
+-- TODO: missing implementation for encoding
+encodeUserInfo :: String -> String
+encodeUserInfo text = text
 
 -- TODO: missing implementation for encoding
 encodeSegment :: String -> String
@@ -90,24 +96,30 @@ encodeQuery text = text
 encodeFragment :: String -> String
 encodeFragment text = text
 
+getUserInfo :: Plug -> String
+getUserInfo Plug { username = Nothing, password = Nothing } = ""
+getUserInfo Plug { username = Nothing, password = Just password' } = ':' : encodeUserInfo password' ++ "@"
+getUserInfo Plug { username = Just username', password = Nothing } = encodeUserInfo username' ++ "@"
+getUserInfo Plug { username = Just username', password = Just password' } = encodeUserInfo username' ++ ":" ++ encodeUserInfo password' ++ "@"
+
 getHost :: Plug -> String
-getHost (Plug _ hostname port True _ _ _) = hostname
-getHost (Plug _ hostname port False _ _ _) = hostname ++ ":" ++ show port
+getHost Plug { hostname = hostname', port = port', usesDefaultPort = True } = hostname'
+getHost Plug { hostname = hostname', port = port', usesDefaultPort = False } = hostname' ++ ":" ++ show port'
 
 getPath :: Plug -> String
-getPath (Plug _ _ _ _ Nothing _ _) = ""
-getPath (Plug _ _ _ _ (Just (segments, True)) _ _) = '/' : joinString "/" (map encodeSegment segments) ++ "/"
-getPath (Plug _ _ _ _ (Just (segments, False)) _ _) = '/' : joinString "/" (map encodeSegment segments)
+getPath Plug { path = Nothing } = ""
+getPath Plug { path = Just (segments', True) } = '/' : joinString "/" (map encodeSegment segments') ++ "/"
+getPath Plug { path = Just (segments', False) } = '/' : joinString "/" (map encodeSegment segments')
 
 getQuery :: Plug -> String
-getQuery (Plug _ _ _ _ _ Nothing _) = ""
-getQuery (Plug _ _ _ _ _ (Just kvs) _) = '?' : joinString "&" (map showQueryKeyValue kvs)
+getQuery Plug { query = Nothing } = ""
+getQuery Plug { query = Just kvs } = '?' : joinString "&" (map showQueryKeyValue kvs)
     where showQueryKeyValue (k, Nothing) = encodeQuery k
           showQueryKeyValue (k, (Just v)) = encodeQuery k ++ "=" ++ encodeQuery v
 
 getFragment :: Plug -> String
-getFragment (Plug _ _ _ _ _ _ Nothing) = ""
-getFragment (Plug _ _ _ _ _ _ (Just f)) = '#' : encodeFragment f
+getFragment Plug { fragment = Nothing } = ""
+getFragment Plug { fragment = Just fragment' } = '#' : encodeFragment fragment'
 
 instance Show Plug where
-    show p = scheme p ++ "://" ++ getHost p ++ getPath p ++ getQuery p ++ getFragment p
+    show p = scheme p ++ "://" ++ getUserInfo p ++ getHost p ++ getPath p ++ getQuery p ++ getFragment p
