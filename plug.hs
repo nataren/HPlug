@@ -3,7 +3,7 @@ joinString _ [] = ""
 joinString sep [ value ] = value
 joinString sep (value:values) = value ++ sep ++ joinString sep values
 
--- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, usesDefaultPort = True, path = Nothing, query = Nothing, fragment = Nothing }
+-- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, path = Nothing, query = Nothing, fragment = Nothing }
 -- p `withScheme` "https" `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
 
 
@@ -13,13 +13,10 @@ data Plug = Plug {
     password        :: Maybe String,
     hostname        :: String,
     port            :: Int,
-    usesDefaultPort :: Bool,
     path            :: Maybe ([String], Bool),
     query           :: Maybe [(String, Maybe String)],
     fragment        :: Maybe String
 } deriving (Eq)
-
--- (Plug scheme hostname port usesDefaultPort path query fragment) = Plug scheme hostname port usesDefaultPort path query fragment
 
 -- TODO (steveb): comparison needs to be case-insensitive
 isDefaultPort :: String -> Int -> Bool
@@ -28,8 +25,11 @@ isDefaultPort "https" 443 = True
 isDefaultPort "ftp" 21 = True
 isDefaultPort _ _ = False
 
+usesDefaultPort :: Plug -> Bool
+usesDefaultPort plug = isDefaultPort (scheme plug) (port plug)
+
 withScheme :: Plug -> String -> Plug
-withScheme plug scheme' = plug { scheme = scheme', usesDefaultPort = isDefaultPort scheme' (port plug) }
+withScheme plug scheme' = plug { scheme = scheme' }
 
 withCredentials :: Plug -> (String, String) -> Plug
 withCredentials plug (username', password') = plug { username = Just username', password = Just password' } 
@@ -42,7 +42,7 @@ withHostname :: Plug -> String -> Plug
 withHostname plug hostname' = plug { hostname = hostname' }
 
 withPort :: Plug -> Int -> Plug
-withPort plug port' = plug { port = port', usesDefaultPort = isDefaultPort (scheme plug) port' }
+withPort plug port' = plug { port = port' }
 
 withTrailingSlash :: Plug -> Plug
 withTrailingSlash plug@Plug { path = Nothing } = plug { path = Just ([], True) }
@@ -71,7 +71,7 @@ withParams plug@Plug { query = Just kvs' } kvs = plug { query = Just (kvs' ++ kv
 -- getParam
 -- getParams
 
--- without key (Plug scheme hostname port usesDefaultPort path query fragment) = Plug scheme hostname port usesDefaultPort path query fragment
+-- without key (Plug scheme hostname port path query fragment) = Plug scheme hostname port path query fragment
 
 withFragment :: Plug -> String -> Plug
 withFragment plug fragment' = plug { fragment = Just fragment' }
@@ -103,8 +103,7 @@ getUserInfo Plug { username = Just username', password = Nothing } = encodeUserI
 getUserInfo Plug { username = Just username', password = Just password' } = encodeUserInfo username' ++ ":" ++ encodeUserInfo password' ++ "@"
 
 getHost :: Plug -> String
-getHost Plug { hostname = hostname', port = port', usesDefaultPort = True } = hostname'
-getHost Plug { hostname = hostname', port = port', usesDefaultPort = False } = hostname' ++ ":" ++ show port'
+getHost plug = (hostname plug) ++ (if usesDefaultPort plug then "" else ':' : show (port plug) )
 
 getPath :: Plug -> String
 getPath Plug { path = Nothing } = ""
