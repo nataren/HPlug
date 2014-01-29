@@ -1,10 +1,15 @@
+import Data.Char (toUpper)
+
 joinString :: String -> [String] -> String
 joinString _ [] = ""
 joinString sep [ value ] = value
 joinString sep (value:values) = value ++ sep ++ joinString sep values
 
+equalIgnoreCase :: String -> String -> Bool
+equalIgnoreCase a b = map toUpper a == map toUpper b
+
 -- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, path = Nothing, query = Nothing, fragment = Nothing }
--- p `withScheme` "https" `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
+-- p `withScheme` "https" withCredentials ("john", "pwd") `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
 
 
 data Plug = Plug {
@@ -20,9 +25,9 @@ data Plug = Plug {
 
 -- TODO (steveb): comparison needs to be case-insensitive
 isDefaultPort :: String -> Int -> Bool
-isDefaultPort "http" 80 = True
-isDefaultPort "https" 443 = True
-isDefaultPort "ftp" 21 = True
+isDefaultPort scheme' 80 = scheme' `equalIgnoreCase` "http"
+isDefaultPort scheme' 443 = scheme' `equalIgnoreCase` "https"
+isDefaultPort scheme' 21 = scheme' `equalIgnoreCase` "ftp"
 isDefaultPort _ _ = False
 
 usesDefaultPort :: Plug -> Bool
@@ -62,16 +67,19 @@ with :: Plug -> (String, Maybe String) -> Plug
 with plug@Plug { query = Nothing } kv = plug { query = Just [ kv ]}
 with plug@Plug { query = Just kvs } kv = plug { query = Just (kvs ++ [ kv ])}
 
+-- without :: Plug -> String -> Plug
+
 withParams :: Plug -> [(String, Maybe String)] -> Plug
 withParams plug@Plug { query = Nothing } kvs = plug { query = Just kvs }
 withParams plug@Plug { query = Just kvs' } kvs = plug { query = Just (kvs' ++ kvs) }
 
--- withQuery
--- withoutQuery
--- getParam
--- getParams
+-- withQuery :: Plug -> String -> Plug
 
--- without key (Plug scheme hostname port path query fragment) = Plug scheme hostname port path query fragment
+withoutQuery :: Plug -> Plug
+withoutQuery plug = plug { query = Nothing }
+
+-- getParam :: Plug -> String -> Maybe Maybe String
+-- getParams :: Plug -> String -> [ Maybe String ]
 
 withFragment :: Plug -> String -> Plug
 withFragment plug fragment' = plug { fragment = Just fragment' }
