@@ -5,8 +5,8 @@ joinString _ [] = ""
 joinString sep [ value ] = value
 joinString sep (value:values) = value ++ sep ++ joinString sep values
 
-equalIgnoreCase :: String -> String -> Bool
-equalIgnoreCase a b = map toUpper a == map toUpper b
+equalsIgnoreCase :: String -> String -> Bool
+equalsIgnoreCase a b = map toUpper a == map toUpper b
 
 -- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, path = Nothing, query = Nothing, fragment = Nothing }
 -- p `withScheme` "https" withCredentials ("john", "pwd") `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
@@ -25,9 +25,9 @@ data Plug = Plug {
 
 -- TODO (steveb): comparison needs to be case-insensitive
 isDefaultPort :: String -> Int -> Bool
-isDefaultPort scheme' 80 = scheme' `equalIgnoreCase` "http"
-isDefaultPort scheme' 443 = scheme' `equalIgnoreCase` "https"
-isDefaultPort scheme' 21 = scheme' `equalIgnoreCase` "ftp"
+isDefaultPort scheme' 80 = scheme' `equalsIgnoreCase` "http"
+isDefaultPort scheme' 443 = scheme' `equalsIgnoreCase` "https"
+isDefaultPort scheme' 21 = scheme' `equalsIgnoreCase` "ftp"
 isDefaultPort _ _ = False
 
 usesDefaultPort :: Plug -> Bool
@@ -67,7 +67,11 @@ with :: Plug -> (String, Maybe String) -> Plug
 with plug@Plug { query = Nothing } kv = plug { query = Just [ kv ]}
 with plug@Plug { query = Just kvs } kv = plug { query = Just (kvs ++ [ kv ])}
 
--- without :: Plug -> String -> Plug
+without :: Plug -> String -> Plug
+without plug@Plug { query = Nothing } _ = plug
+without plug@Plug { query = Just queryParams } key = plug { query = if null queryParams' then Nothing else Just queryParams' }
+    where matchesKey (key', _) = not (key `equalsIgnoreCase` key')
+          queryParams' = filter matchesKey queryParams
 
 withParams :: Plug -> [(String, Maybe String)] -> Plug
 withParams plug@Plug { query = Nothing } kvs = plug { query = Just kvs }
@@ -78,8 +82,16 @@ withParams plug@Plug { query = Just kvs' } kvs = plug { query = Just (kvs' ++ kv
 withoutQuery :: Plug -> Plug
 withoutQuery plug = plug { query = Nothing }
 
--- getParam :: Plug -> String -> Maybe Maybe String
--- getParams :: Plug -> String -> [ Maybe String ]
+getParam :: Plug -> String -> Maybe (Maybe String)
+getParam plug@Plug { query = Nothing } _ = Nothing
+getParam plug@Plug { query = Just queryParams } key = if null matchedParams then Nothing else Just $ head matchedParams
+    where matchedParams = plug `getParams` key
+
+getParams :: Plug -> String -> [ Maybe String ]
+getParams plug@Plug { query = Nothing } _ = [ ]
+getParams plug@Plug { query = Just queryParams } key = map selectValue $ filter matchesKey queryParams
+    where matchesKey (key', _) = key `equalsIgnoreCase` key'
+          selectValue (_, value) = value
 
 withFragment :: Plug -> String -> Plug
 withFragment plug fragment' = plug { fragment = Just fragment' }
