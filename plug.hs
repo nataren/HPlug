@@ -1,9 +1,9 @@
-import Data.Char (toUpper)
-import Data.List (intersperse)
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit, toUpper)
+import Data.List (intercalate)
 import Network.URI (escapeURIString)
 
 join :: [a] -> [[a]] -> [a]
-join delim l = concat (intersperse delim l)
+join = intercalate
 
 equalsIgnoreCase :: String -> String -> Bool
 equalsIgnoreCase a b = map toUpper a == map toUpper b
@@ -104,7 +104,7 @@ data EncodingLevel = UserInfo | Segment | Query | Fragment
 
 isValidUriChar :: EncodingLevel -> Char -> Bool
 isValidUriChar l c
-    | (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') = True
+    | isAsciiLower c || isAsciiUpper c || isDigit c = True
     | c `elem` "'()*-._!" = True
     | l >= Fragment && c == '#' = True
     | l >= Query && (c `elem` "/:-$,;|") = True
@@ -113,16 +113,16 @@ isValidUriChar l c
     | otherwise = False
 
 encodeUserInfo :: String -> String
-encodeUserInfo text = escapeURIString (isValidUriChar UserInfo) text
+encodeUserInfo = escapeURIString (isValidUriChar UserInfo)
 
 encodeSegment :: String -> String
-encodeSegment text = escapeURIString (isValidUriChar Segment) text
+encodeSegment = escapeURIString (isValidUriChar Segment)
 
 encodeQuery :: String -> String
-encodeQuery text = escapeURIString (isValidUriChar Query) text
+encodeQuery = escapeURIString (isValidUriChar Query)
 
 encodeFragment :: String -> String
-encodeFragment text = escapeURIString (isValidUriChar Fragment) text
+encodeFragment = escapeURIString (isValidUriChar Fragment)
 
 getUserInfo :: Plug -> String
 getUserInfo Plug { username = Nothing, password = Nothing } = ""
@@ -131,7 +131,7 @@ getUserInfo Plug { username = Just username', password = Nothing } = encodeUserI
 getUserInfo Plug { username = Just username', password = Just password' } = encodeUserInfo username' ++ ":" ++ encodeUserInfo password' ++ "@"
 
 getHost :: Plug -> String
-getHost plug = (hostname plug) ++ (if usesDefaultPort plug then "" else ':' : show (port plug) )
+getHost plug = hostname plug ++ (if usesDefaultPort plug then "" else ':' : show (port plug) )
 
 getPath :: Plug -> String
 getPath Plug { path = Nothing } = ""
@@ -142,7 +142,7 @@ getQuery :: Plug -> String
 getQuery Plug { query = Nothing } = ""
 getQuery Plug { query = Just kvs } = '?' : join "&" (map showQueryKeyValue kvs)
     where showQueryKeyValue (k, Nothing) = encodeQuery k
-          showQueryKeyValue (k, (Just v)) = encodeQuery k ++ "=" ++ encodeQuery v
+          showQueryKeyValue (k, Just v) = encodeQuery k ++ "=" ++ encodeQuery v
 
 getFragment :: Plug -> String
 getFragment Plug { fragment = Nothing } = ""
