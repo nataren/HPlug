@@ -2,9 +2,6 @@ import Data.Char (isAsciiLower, isAsciiUpper, isDigit, toUpper)
 import Data.List (intercalate)
 import Network.URI (escapeURIString)
 
-join :: [a] -> [[a]] -> [a]
-join = intercalate
-
 equalsIgnoreCase :: String -> String -> Bool
 equalsIgnoreCase a b = map toUpper a == map toUpper b
 
@@ -135,12 +132,12 @@ getHost plug = hostname plug ++ (if usesDefaultPort plug then "" else ':' : show
 
 getPath :: Plug -> String
 getPath Plug { path = Nothing } = ""
-getPath Plug { path = Just (segments', True) } = '/' : join "/" (map encodeSegment segments') ++ "/"
-getPath Plug { path = Just (segments', False) } = '/' : join "/" (map encodeSegment segments')
+getPath Plug { path = Just (segments', True) } = '/' : intercalate "/" (map encodeSegment segments') ++ "/"
+getPath Plug { path = Just (segments', False) } = '/' : intercalate "/" (map encodeSegment segments')
 
 getQuery :: Plug -> String
 getQuery Plug { query = Nothing } = ""
-getQuery Plug { query = Just kvs } = '?' : join "&" (map showQueryKeyValue kvs)
+getQuery Plug { query = Just kvs } = '?' : intercalate "&" (map showQueryKeyValue kvs)
     where showQueryKeyValue (k, Nothing) = encodeQuery k
           showQueryKeyValue (k, Just v) = encodeQuery k ++ "=" ++ encodeQuery v
 
