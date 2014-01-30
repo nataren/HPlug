@@ -1,4 +1,5 @@
 import Data.Char (toUpper)
+import Network.URI (escapeURIString)
 
 joinString :: String -> [String] -> String
 joinString _ [] = ""
@@ -11,7 +12,6 @@ equalsIgnoreCase a b = map toUpper a == map toUpper b
 -- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, path = Nothing, query = Nothing, fragment = Nothing }
 -- p `withScheme` "https" withCredentials ("john", "pwd") `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
 
-
 data Plug = Plug {
     scheme          :: String,
     username        :: Maybe String,
@@ -23,7 +23,6 @@ data Plug = Plug {
     fragment        :: Maybe String
 } deriving (Eq)
 
--- TODO (steveb): comparison needs to be case-insensitive
 isDefaultPort :: String -> Int -> Bool
 isDefaultPort scheme' 80 = scheme' `equalsIgnoreCase` "http"
 isDefaultPort scheme' 443 = scheme' `equalsIgnoreCase` "https"
@@ -100,21 +99,30 @@ withoutFragment :: Plug -> Plug
 withoutFragment plug@Plug { fragment = Nothing } = plug
 withoutFragment plug = plug { fragment = Nothing }
 
--- TODO: missing implementation for encoding
+data EncodingLevel = UserInfo | Segment | Query | Fragment
+    deriving (Ord, Eq)
+
+isValidUriChar :: EncodingLevel -> Char -> Bool
+isValidUriChar l c
+    | (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') = True
+    | c `elem` "'()*-._!" = True
+    | l >= Fragment && c == '#' = True
+    | l >= Query && (c `elem` "/:-$,;|") = True
+    | l >= Segment && (c `elem` "@^") = True
+    | l == UserInfo && (c `elem` "&=") = True
+    | otherwise = False
+
 encodeUserInfo :: String -> String
-encodeUserInfo text = text
+encodeUserInfo text = escapeURIString (isValidUriChar UserInfo) text
 
--- TODO: missing implementation for encoding
 encodeSegment :: String -> String
-encodeSegment text = text
+encodeSegment text = escapeURIString (isValidUriChar Segment) text
 
--- TODO: missing implementation for encoding
 encodeQuery :: String -> String
-encodeQuery text = text
+encodeQuery text = escapeURIString (isValidUriChar Query) text
 
--- TODO: missing implementation for encoding
 encodeFragment :: String -> String
-encodeFragment text = text
+encodeFragment text = escapeURIString (isValidUriChar Fragment) text
 
 getUserInfo :: Plug -> String
 getUserInfo Plug { username = Nothing, password = Nothing } = ""
