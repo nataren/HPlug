@@ -1,10 +1,9 @@
 import Data.Char (toUpper)
+import Data.List (intersperse)
 import Network.URI (escapeURIString)
 
-joinString :: String -> [String] -> String
-joinString _ [] = ""
-joinString sep [ value ] = value
-joinString sep (value:values) = value ++ sep ++ joinString sep values
+join :: [a] -> [[a]] -> [a]
+join delim l = concat (intersperse delim l)
 
 equalsIgnoreCase :: String -> String -> Bool
 equalsIgnoreCase a b = map toUpper a == map toUpper b
@@ -76,6 +75,7 @@ withParams :: Plug -> [(String, Maybe String)] -> Plug
 withParams plug@Plug { query = Nothing } kvs = plug { query = Just kvs }
 withParams plug@Plug { query = Just kvs' } kvs = plug { query = Just (kvs' ++ kvs) }
 
+-- TODO
 -- withQuery :: Plug -> String -> Plug
 
 withoutQuery :: Plug -> Plug
@@ -135,12 +135,12 @@ getHost plug = (hostname plug) ++ (if usesDefaultPort plug then "" else ':' : sh
 
 getPath :: Plug -> String
 getPath Plug { path = Nothing } = ""
-getPath Plug { path = Just (segments', True) } = '/' : joinString "/" (map encodeSegment segments') ++ "/"
-getPath Plug { path = Just (segments', False) } = '/' : joinString "/" (map encodeSegment segments')
+getPath Plug { path = Just (segments', True) } = '/' : join "/" (map encodeSegment segments') ++ "/"
+getPath Plug { path = Just (segments', False) } = '/' : join "/" (map encodeSegment segments')
 
 getQuery :: Plug -> String
 getQuery Plug { query = Nothing } = ""
-getQuery Plug { query = Just kvs } = '?' : joinString "&" (map showQueryKeyValue kvs)
+getQuery Plug { query = Just kvs } = '?' : join "&" (map showQueryKeyValue kvs)
     where showQueryKeyValue (k, Nothing) = encodeQuery k
           showQueryKeyValue (k, (Just v)) = encodeQuery k ++ "=" ++ encodeQuery v
 
