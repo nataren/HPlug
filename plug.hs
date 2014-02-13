@@ -1,3 +1,36 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+
+module Plug (
+    Plug(..),
+    usesDefaultPort,
+    withScheme,
+    withCredentials,
+    withoutCredentials,
+    withHostname,
+    withPort,
+    withTrailingSlash,
+    withoutTrailingSlash,
+    at,
+    with,
+    with',
+    without,
+    withParams,
+    withoutQuery,
+    getParam,
+    getParams,
+    withFragment,
+    withoutFragment,
+    getScheme,
+    getAuthority,
+    getHost,
+    getPath,
+    getQuery,
+    getFragment,
+    show,
+    (&)
+) where
+
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit, toUpper)
 import Data.List (intercalate)
 import Network.URI (escapeURIString)
@@ -19,6 +52,7 @@ data Plug = Plug {
     fragment        :: Maybe String
 } deriving (Eq)
 
+-- TODO (steveb): need to fix this; this function is about determinig if the original text had an explicit port or not
 isDefaultPort :: String -> Int -> Bool
 isDefaultPort scheme' 80 = scheme' `equalsIgnoreCase` "http"
 isDefaultPort scheme' 443 = scheme' `equalsIgnoreCase` "https"
@@ -61,6 +95,10 @@ at plug@Plug { path = Just (segments', trailingSlash') } segment = plug { path =
 with :: Plug -> (String, Maybe String) -> Plug
 with plug@Plug { query = Nothing } kv = plug { query = Just [ kv ]}
 with plug@Plug { query = Just kvs } kv = plug { query = Just (kvs ++ [ kv ])}
+
+with' :: Plug -> (String, String) -> Plug
+with' plug@Plug { query = Nothing } (k, v) = plug { query = Just [ (k, Just v) ]}
+with' plug@Plug { query = Just kvs } (k, v) = plug { query = Just (kvs ++ [ (k, Just v) ])}
 
 without :: Plug -> String -> Plug
 without plug@Plug { query = Nothing } _ = plug
@@ -121,6 +159,9 @@ encodeQuery = escapeURIString (isValidUriChar Query)
 encodeFragment :: String -> String
 encodeFragment = escapeURIString (isValidUriChar Fragment)
 
+getScheme :: Plug -> String
+getScheme plug = scheme plug ++ "://"
+
 getUserInfo :: Plug -> String
 getUserInfo Plug { username = Nothing, password = Nothing } = ""
 getUserInfo Plug { username = Nothing, password = Just password' } = ':' : encodeUserInfo password' ++ "@"
@@ -129,6 +170,9 @@ getUserInfo Plug { username = Just username', password = Just password' } = enco
 
 getHost :: Plug -> String
 getHost plug = hostname plug ++ (if usesDefaultPort plug then "" else ':' : show (port plug) )
+
+getAuthority :: Plug -> String
+getAuthority plug = getUserInfo plug ++ getHost plug
 
 getPath :: Plug -> String
 getPath Plug { path = Nothing } = ""
@@ -146,4 +190,16 @@ getFragment Plug { fragment = Nothing } = ""
 getFragment Plug { fragment = Just fragment' } = '#' : encodeFragment fragment'
 
 instance Show Plug where
-    show p = scheme p ++ "://" ++ getUserInfo p ++ getHost p ++ getPath p ++ getQuery p ++ getFragment p
+    show plug = getScheme plug ++ getAuthority plug ++ getPath plug ++ getQuery plug ++ getFragment plug
+
+class PlugAppend a where
+    (&) :: Plug -> a -> Plug
+
+instance PlugAppend String where
+    (&) plug segment = plug `at` segment
+
+instance PlugAppend (String, Maybe String) where
+    (&) plug kv = plug `with` kv
+
+instance PlugAppend (String, String) where
+    (&) plug (k, v) = plug `with` (k, Just v)
