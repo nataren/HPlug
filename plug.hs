@@ -79,13 +79,13 @@ withPort plug port' = plug { port = port' }
 
 withTrailingSlash :: Plug -> Plug
 withTrailingSlash plug@Plug { path = Nothing } = plug { path = Just ([], True) }
-withTrailingSlash plug@Plug { path = Just (segments', True) } = plug
+withTrailingSlash plug@Plug { path = Just (_, True) } = plug
 withTrailingSlash plug@Plug { path = Just (segments', False) } = plug { path = Just (segments', True) }
 
 withoutTrailingSlash :: Plug -> Plug
 withoutTrailingSlash plug@Plug { path = Nothing } = plug
 withoutTrailingSlash plug@Plug { path = Just (segments', True) } = plug { path = Just (segments', False) }
-withoutTrailingSlash plug@Plug { path = Just (segments', False ) } = plug
+withoutTrailingSlash plug@Plug { path = Just (_, False ) } = plug
 
 at :: Plug -> String -> Plug
 at plug@Plug { path = Nothing } segment = plug { path = Just ([ segment ], False)}
@@ -116,13 +116,13 @@ withoutQuery :: Plug -> Plug
 withoutQuery plug = plug { query = Nothing }
 
 getParam :: Plug -> String -> Maybe (Maybe String)
-getParam plug@Plug { query = Nothing } _ = Nothing
-getParam plug@Plug { query = Just queryParams } key = if null matchedParams then Nothing else Just $ head matchedParams
+getParam Plug { query = Nothing } _ = Nothing
+getParam plug@Plug { query = Just _ } key = if null matchedParams then Nothing else Just $ head matchedParams
     where matchedParams = plug `getParams` key
 
 getParams :: Plug -> String -> [ Maybe String ]
-getParams plug@Plug { query = Nothing } _ = [ ]
-getParams plug@Plug { query = Just queryParams } key = map selectValue $ filter matchesKey queryParams
+getParams Plug { query = Nothing } _ = [ ]
+getParams Plug { query = Just queryParams } key = map selectValue $ filter matchesKey queryParams
     where matchesKey (key', _) = key `equalsIgnoreCase` key'
           selectValue (_, value) = value
 
