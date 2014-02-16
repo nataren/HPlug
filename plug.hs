@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Plug (
-    Plug(..),
     usesDefaultPort,
     withScheme,
     withCredentials,
@@ -39,7 +38,7 @@ equalsIgnoreCase :: String -> String -> Bool
 equalsIgnoreCase a b = map toUpper a == map toUpper b
 
 -- let p = Plug { scheme = "http", username = Nothing, password = Nothing, hostname = "example.com", port = 80, path = Nothing, query = Nothing, fragment = Nothing }
--- p `withScheme` "https" withCredentials ("john", "pwd") `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
+-- p `withScheme` "https" `withCredentials` ("john", "pwd") `withPort` 443 `at` "x" `at` "y" `with` ("a", Just "b") `withFragment` "foo"
 
 data Plug = Plug {
     scheme          :: String,
