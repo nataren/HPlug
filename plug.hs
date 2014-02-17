@@ -2,7 +2,15 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Plug (
+
+    -- * The Plug type
+    Plug,
+    fromString,
+    
+    -- * Predicates
     usesDefaultPort,
+    
+    -- * Modifier functions
     withScheme,
     withCredentials,
     withoutCredentials,
@@ -16,10 +24,13 @@ module Plug (
     without,
     withParams,
     withoutQuery,
-    getParam,
-    getParams,
     withFragment,
     withoutFragment,
+    (&),
+          
+    -- * Data extraction functions
+    getParam,
+    getParams,
     getScheme,
     getAuthority,
     getHost,
@@ -27,12 +38,20 @@ module Plug (
     getQuery,
     getFragment,
     show,
-    (&)
+    
+    -- * HTTP verbs
+    get
 ) where
 
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit, toUpper)
 import Data.List (intercalate)
-import Network.URI (escapeURIString)
+import Data.List.Split(splitOn)
+import Network.URI (URI, escapeURIString, parseURI, uriAuthority, uriUserInfo)
+import Data.Maybe
+import qualified Network.HTTP.Conduit as Conduit
+import Data.Conduit
+import qualified Data.ByteString.Char8 as BC
+import Network (withSocketsDo)
 
 equalsIgnoreCase :: String -> String -> Bool
 equalsIgnoreCase a b = map toUpper a == map toUpper b
@@ -49,7 +68,34 @@ data Plug = Plug {
     path            :: Maybe ([String], Bool),
     query           :: Maybe [(String, Maybe String)],
     fragment        :: Maybe String
+} | ParsedPlug {
+    uri             :: Maybe Network.URI.URI,
+    username        :: Maybe String,
+    password        :: Maybe String
 } deriving (Eq)
+
+fromString :: String -> Maybe Plug
+fromString string = fromURI (parseURI string)
+
+fromURI :: Maybe URI -> Maybe Plug
+fromURI Nothing = Nothing
+fromURI (Just uri') =
+    let userInfo = case uriAuthority uri' of Nothing -> []
+                                             Just uriAuth -> splitOn ":" (uriUserInfo uriAuth)
+        (username', password') = getUsernameAndPassword userInfo
+    in Just ParsedPlug {
+        uri = Just uri',
+        username = username',
+        password = password'
+    }
+
+getUsernameAndPassword :: [String] -> (Maybe String, Maybe String)
+getUsernameAndPassword (x : y : _) = (Just x, Just (dropLastChar y))
+getUsernameAndPassword (x : _) = (Just (dropLastChar x), Nothing)
+getUsernameAndPassword _ = (Nothing, Nothing)
+
+dropLastChar :: String -> String
+dropLastChar s = (take ((length  s) - 1) s)
 
 -- TODO (steveb): need to fix this; this function is about determinig if the original text had an explicit port or not
 isDefaultPort :: String -> Int -> Bool
@@ -188,6 +234,21 @@ getFragment :: Plug -> String
 getFragment Plug { fragment = Nothing } = ""
 getFragment Plug { fragment = Just fragment' } = '#' : encodeFragment fragment'
 
+getAuthRequest :: Maybe String -> Maybe String -> Conduit.Request -> Conduit.Request
+getAuthRequest username' password' request' =
+    case (username', password') of
+        (Just u, Just p) -> Conduit.applyBasicAuth (BC.pack u) (BC.pack p) request'
+        (_, _) -> request'
+    
+get :: Plug -> IO (Conduit.Response (ResumableSource (ResourceT IO) BC.ByteString))
+get plug = withSocketsDo $ Conduit.withManager $ \manager -> do
+    request <- case plug of
+        Plug _ _ _ _ _ _ _ _ -> Conduit.parseUrl (show plug)
+        ParsedPlug _ _ _-> Conduit.parseUrl (show (fromJust (uri plug)))
+    let request' = getAuthRequest (username plug) (password plug) request
+    response <- Conduit.http request' manager
+    return response
+
 instance Show Plug where
     show plug = getScheme plug ++ getAuthority plug ++ getPath plug ++ getQuery plug ++ getFragment plug
 
@@ -202,3 +263,7 @@ instance PlugAppend (String, Maybe String) where
 
 instance PlugAppend (String, String) where
     (&) plug (k, v) = plug `with` (k, Just v)
+    
+-- let g =  (get (fromJust (fromString "http://google.com")))
+-- :t g
+-- g :: IO (Response (ResumableSource (ResourceT IO) BC.ByteString))
